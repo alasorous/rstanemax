@@ -1,0 +1,202 @@
+---
+title: "Simple Emax model fit with Stan"
+author: "Kenta Yoshida"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Simple Emax model fit with Stan}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r message=FALSE}
+library(rstanemax)
+library(dplyr)
+library(ggplot2)
+set.seed(12345)
+```
+
+This vignette provide an overview of the workflow of Emax model analysis using this package.
+
+
+# Typical workflow
+
+## Model run with `stan_emax` function
+
+`stan_emax()` is the main function of this package to perform Emax model analysis on the data.
+This function requires minimum two input arguments - `formula` and `data`.
+In the `formula` argument, you will specify which columns of `data` will be used as exposure and response data, in a format similar to `stats::lm()` function, e.g. `response ~ exposure`.
+
+```{r, results="hide"}
+data(exposure.response.sample)
+
+fit.emax <- stan_emax(response ~ exposure, data = exposure.response.sample,
+                      # the next line is only to make the example go fast enough
+                      chains = 2, iter = 1000, seed = 12345)
+```
+
+```{r}
+fit.emax
+```
+
+`plot()` function shows the estimated Emax model curve with 95% credible intervals of parameters.
+
+```{r plot_example, fig.show='hold'}
+plot(fit.emax)
+```
+
+Raw output from `rstan` is stored in the output variable, and you can access it with `extract_stanfit()` function.
+
+```{r}
+class(extract_stanfit(fit.emax))
+```
+
+## Prediction of response with new exposure data
+
+`posterior_predict()` function allows users to predict the response using new exposure data.
+If `newdata` is not provided, the function returns the prediction on the exposures in original data.
+The default output is a matrix of posterior predictions, but you can also specify "dataframe" or "tibble" that contain posterior predictions in a long format.
+See help of `rstanemax::posterior_predict()` for the description of two predictions, `respHat` and `response`.
+
+```{r}
+response.pred <- posterior_predict(fit.emax, newdata = c(0, 100, 1000), returnType = "tibble")
+
+response.pred %>% select(mcmcid, exposure, respHat, response)
+```
+
+You can also get quantiles of predictions with `posterior_predict_quantile()` function.
+
+```{r}
+resp.pred.quantile <- posterior_predict_quantile(fit.emax, newdata = seq(0, 5000, by = 100))
+resp.pred.quantile
+```
+
+Input data can be obtained in a same format with `extract_obs_mod_frame()` function.
+
+```{r}
+obs.formatted <- extract_obs_mod_frame(fit.emax)
+```
+
+These are particularly useful when you want to plot the estimated Emax curve.
+
+```{r plot_with_pp, fig.show='hold'}
+ggplot(resp.pred.quantile, aes(exposure, ci_med)) +
+  geom_line() + 
+  geom_ribbon(aes(ymin=ci_low, ymax=ci_high), alpha = .5) +
+  geom_ribbon(aes(ymin=pi_low, ymax=pi_high), alpha = .2) +
+  geom_point(data = obs.formatted,
+             aes(y = response)) +
+  labs(y = "response")
+```
+
+
+
+# Fix parameter values in Emax model
+
+You can fix parameter values in Emax model  for E0 and/or gamma (Hill coefficient).
+See help of `stan_emax()` for the details.
+The default is to fix gamma at 1 and to estimate E0 from data.
+
+Below is the example of estimating gamma from data.
+
+```{r, results="hide"}
+data(exposure.response.sample)
+
+fit.emax.sigmoidal <- stan_emax(response ~ exposure, data = exposure.response.sample, gamma.fix = NULL,
+                                # the next line is only to make the example go fast enough
+                                chains = 2, iter = 1000, seed = 12345)
+```
+
+```{r}
+fit.emax.sigmoidal
+```
+
+You can compare the difference of posterior predictions between two models (in this case they are very close to each other):
+
+```{r plot_with_gamma_fix, fig.width = 6, fig.height = 4, fig.show='hold'}
+
+exposure_pred <- seq(min(exposure.response.sample$exposure),
+                     max(exposure.response.sample$exposure),
+                     length.out = 100)
+
+pred1 <- 
+  posterior_predict_quantile(fit.emax, exposure_pred) %>% 
+  mutate(model = "Emax")
+pred2 <- 
+  posterior_predict_quantile(fit.emax.sigmoidal, exposure_pred) %>% 
+  mutate(model = "Sigmoidal Emax")
+
+pred <- bind_rows(pred1, pred2)
+
+
+ggplot(pred, aes(exposure, ci_med, color = model, fill = model)) +
+  geom_line() + 
+  geom_ribbon(aes(ymin=ci_low, ymax=ci_high), alpha = .3) +
+  geom_ribbon(aes(ymin=pi_low, ymax=pi_high), alpha = .1, color = NA) +
+  geom_point(data=exposure.response.sample, aes(exposure, response), 
+             color = "black", fill = NA, size=2) +
+  labs(y = "response")
+
+
+
+ 
+```
+
+
+
+
+# Set covariates
+
+You can specify categorical covariates for Emax, EC50, and E0.
+See help of `stan_emax()` for the details.
+
+
+```{r, results="hide"}
+data(exposure.response.sample.test)
+
+test.data <-
+  mutate(exposure.response.sample.test,
+         SEX = ifelse(cov2 == 0, "MALE", "FEMALE"))
+
+fit.cov <- stan_emax(formula = resp ~ conc, data = test.data,
+                     param.cov = list(emax = "SEX"),
+                     # the next line is only to make the example go fast enough
+                     chains = 2, iter = 1000, seed = 12345)
+```
+
+```{r plot_with_cov, fig.width = 6, fig.height = 4, fig.show='hold'}
+fit.cov
+plot(fit.cov)
+```
+
+
+You can extract MCMC samples from raw stanfit and evaluate differences between groups.
+
+```{r compare_emax, fig.show='hold'}
+emax.posterior <- 
+  fit.cov %>% 
+  extract_stanfit() %>% 
+  rstan::extract(pars = "emax") %>% 
+  .$emax
+
+# delta = emax[FEMALE] - emax[MALE]
+delta.emax.posterior <- emax.posterior[,1] - emax.posterior[,2]
+
+ggplot2::qplot(delta.emax.posterior, bins = 30) +
+  ggplot2::labs(x = "emax[FEMALE] - emax[MALE]")
+
+# Credible interval of delta
+quantile(delta.emax.posterior, probs = c(0.025, 0.05, 0.5, 0.95, 0.975))
+
+# Posterior probability of emax[FEMALE] < emax[MALE]
+sum(delta.emax.posterior < 0) / length(delta.emax.posterior)
+
+```
+
