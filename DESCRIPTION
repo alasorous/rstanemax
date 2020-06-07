@@ -13,13 +13,18 @@ LazyData: true
 ByteCompile: true
 Depends: R (>= 3.4.0), methods,Rcpp (>= 1.0.0)
 Imports: 
+  Rcpp (>= 0.12.0),
   rstan (>= 2.18.2), 
   rstantools (>= 1.5.1), 
   magrittr (>= 1.5), 
   dplyr (>= 0.8.0), 
   tidyr (>= 1.0.0), 
   purrr (>= 0.3.0), 
-  ggplot2 (>= 2.2.1)
+  ggplot2 (>= 2.2.1),
+  recipes,
+  ggridges,
+  caret,
+  tidyverse
 LinkingTo: 
   StanHeaders (>= 2.18.1), 
   rstan (>= 2.18.2), 
