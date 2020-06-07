@@ -1,11 +1,11 @@
-Package: rstanemax
+Package: rDILI
 Version: 0.1.1.9000
-Title: Emax Model Analysis with 'Stan'
-Description: Perform sigmoidal Emax model fit using 'Stan' in a formula notation, without writing 'Stan' model code.
+Title: DILI prediction with 'Stan'
+Description: Perform DILI prediction for new compounds
 Authors@R: c(
-    person("Kenta", "Yoshida", , "6.kurabupasu@gmail.com", c("aut", "cre"), 
-      comment = c(ORCID = "0000-0003-4967-3831")),
-    person("Trustees of Columbia University", role = "cph", 
+    person("Alex", "Godwood", , "alex.godwood@soseiheptares.com", c("aut", "cre"), 
+      comment = c()),
+    person("", role = "cph", 
       comment="src/init.cpp, tools/make_cc.R, R/stanmodels.R"))
 Encoding: UTF-8
 License: GPL-3 | file LICENSE
@@ -41,5 +41,5 @@ Suggests:
     spelling
 VignetteBuilder: knitr
 Language: en-US
-URL: https://github.com/yoshidk6/rstanemax
-BugReports: https://github.com/yoshidk6/rstanemax/issues
+URL: https://github.com/alasorous/rDILI
+BugReports: https://github.com/alasorous/rDILI/issues
